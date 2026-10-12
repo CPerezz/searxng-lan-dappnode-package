@@ -20,9 +20,8 @@
     "ui": "http://dappnode.local:8080",
     "homepage": "https://github.com/CPerezz/searxng-lan-dappnode-package"
   },
-  "repository": {
-    "type": "git",
-    "url": "https://github.com/CPerezz/searxng-lan-dappnode-package"
+  "links": {
+    "homepage": "https://github.com/CPerezz/searxng-lan-dappnode-package"
   },
   "bugs": {
     "url": "https://github.com/CPerezz/searxng-lan-dappnode-package/issues"
