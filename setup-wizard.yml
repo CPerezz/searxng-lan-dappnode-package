@@ -1,0 +1,34 @@
+version: "2"
+fields:
+  - id: port
+    target:
+      type: portMapping
+      containerPort: "8080"
+      service: gateway
+    title: Port on your home network
+    description: >-
+      Devices open `http://dappnode.local:<port>` or `http://<your DAppNode's IP>:<port>`. 8080 is a popular port:
+      if installing fails with "port is already allocated", another package already uses it. Pick a different port
+      here (for example 8090) and install again.
+    required: true
+  - id: allowedNetworks
+    target:
+      type: environment
+      name: ALLOWED_NETWORKS
+      service: gateway
+    title: Allowed networks
+    description: >-
+      Comma-separated address ranges that may use SearXNG; everything else gets 403. The default covers home
+      networks (10.0.0.0/8, 172.16.0.0/12, 192.168.0.0/16) and DAppNode's OpenVPN clients (172.33.8.0/22);
+      WireGuard clients (10.24.0.0/24) are inside 10.0.0.0/8.
+    required: true
+  - id: outgoingProxy
+    target:
+      type: environment
+      name: OUTGOING_PROXY
+      service: searxng
+    title: Outgoing proxy (optional)
+    description: >-
+      Send SearXNG's requests to search engines through a proxy, for example `http://proxy:3128` or
+      `socks5h://proxy:1080`. Leave empty to connect directly from your DAppNode.
+    required: false

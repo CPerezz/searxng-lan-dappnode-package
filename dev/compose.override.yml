@@ -1,0 +1,25 @@
+# Dev loop on a DAppNode host: run the package's docker-compose.yml as a plain compose project. Mimics what DAppNode
+# adds at install (networks + aliases) and moves the gateway to host port 18080. Containers outside DAppNode packages
+# are never UPnP-forwarded. Tear it down (down -v) before installing the package: the aliases would collide.
+#   docker compose -p sx-dev -f docker-compose.yml -f dev/compose.override.yml up -d --build
+services:
+  gateway:
+    ports: !override
+      - "18080:8080"
+    networks:
+      dncore_network:
+        aliases: [gateway.searxng-lan.public.dappnode]
+      dnprivate_network: {}
+  searxng:
+    environment:
+      OUTGOING_PROXY: ${OUTGOING_PROXY:-}   # tools/verify.sh sets it for the proxy checks
+    networks:
+      dncore_network:
+        aliases: [searxng.searxng-lan.public.dappnode]
+      dnprivate_network: {}
+
+networks:
+  dncore_network:
+    external: true
+  dnprivate_network:
+    external: true

@@ -1,0 +1,18 @@
+{
+	admin off
+	auto_https off
+	persist_config off
+}
+
+# Refuses (403) connections relayed by Docker's userland proxy (IPv6 and loopback connections to the published port
+# arrive from a bridge gateway, which hides the real client) and any source outside ALLOWED_NETWORKS.
+# remote_ip matches the TCP peer address; X-Forwarded-For from clients is never trusted.
+# reverse_proxy keeps the Host header, so SearXNG builds its links for the address the device used.
+http://:8080 {
+	@proxied remote_ip {$DOCKER_GATEWAYS}
+	respond @proxied 403
+	@outside not remote_ip {$ALLOWED_NETWORKS}
+	respond @outside 403
+	header -Server
+	reverse_proxy {$UPSTREAM}
+}

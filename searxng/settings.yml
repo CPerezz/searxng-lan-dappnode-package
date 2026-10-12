@@ -1,0 +1,21 @@
+# Only the overrides: everything else comes from SearXNG's own defaults (use_default_settings). The entrypoint copies
+# this file to /etc/searxng/settings.yml on every start and appends `outgoing.proxies` when OUTGOING_PROXY is set.
+# The secret key is not here: it is generated per install and passed as SEARXNG_SECRET.
+use_default_settings: true
+
+server:
+  limiter: false          # private instance: no bot limiter, no Valkey
+  public_instance: false
+  image_proxy: true       # result thumbnails load through this instance, not from third-party sites
+  base_url: false         # links follow the address the device used (dappnode.local or the IP)
+  method: "GET"           # Chrome and Edge only add GET search engines
+
+search:
+  safe_search: 0
+  autocomplete: ""        # upstream default is "duckduckgo": every keystroke would go to a suggestion provider
+  formats:
+    - html                # no JSON/CSV/RSS API
+
+ui:
+  theme_args:
+    simple_style: auto    # light/dark follows the device

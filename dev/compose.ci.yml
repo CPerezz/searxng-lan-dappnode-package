@@ -1,0 +1,18 @@
+# CI: same services on a private compose network instead of DAppNode's. Its range (100.66.0.0/24) is outside the
+# default ALLOWED_NETWORKS, like DAppNode's dncore_network, so containers on it count as "outside".
+#   docker compose -p sx-ci -f docker-compose.yml -f dev/compose.ci.yml up -d --build
+services:
+  gateway:
+    networks:
+      sxnet:
+        aliases: [gateway.searxng-lan.public.dappnode]
+  searxng:
+    networks:
+      sxnet:
+        aliases: [searxng.searxng-lan.public.dappnode]
+
+networks:
+  sxnet:
+    ipam:
+      config:
+        - subnet: 100.66.0.0/24

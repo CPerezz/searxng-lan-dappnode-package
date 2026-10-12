@@ -1,0 +1,45 @@
+version: "3.5"
+
+# `gateway` is the only service with a published port: DAppNode UPnP-forwards every published port, so the gateway
+# answers 403 to sources outside ALLOWED_NETWORKS. SearXNG itself is reachable only through it.
+services:
+  gateway:
+    build:
+      context: gateway
+      args:
+        CADDY_VERSION: 2.11.7
+    restart: unless-stopped
+    security_opt:
+      - no-new-privileges:true
+    cap_drop: [ALL]
+    user: "1000:1000"
+    environment:
+      # Home networks + DAppNode's OpenVPN clients (172.33.8.0/22). WireGuard clients (10.24.0.0/24) are in 10/8.
+      ALLOWED_NETWORKS: 10.0.0.0/8,172.16.0.0/12,192.168.0.0/16,172.33.8.0/22
+    ports:
+      - "8080:8080"
+
+  searxng:
+    build:
+      context: searxng
+      args:
+        SEARXNG_VERSION: 2026.10.11-ad46ebd7d
+    restart: unless-stopped
+    security_opt:
+      - no-new-privileges:true
+    cap_drop: [ALL]
+    user: "977:977"
+    environment:
+      # Optional: http://host:port or socks5h://host:port for the requests SearXNG sends to search engines.
+      OUTGOING_PROXY: ""
+    volumes:
+      - searxng-data:/var/cache/searxng
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1:8080/healthz"]
+      interval: 30s
+      timeout: 5s
+      start_period: 30s
+      retries: 3
+
+volumes:
+  searxng-data: {}
