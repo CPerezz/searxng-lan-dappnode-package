@@ -46,10 +46,18 @@ under DAppNode's trusted release keys: name `cperezz.eth`, suffix `.public.dappn
 
 ### If the port is taken
 
-8080 is a popular port. If another package already uses it, the install fails with
-`Bind for 0.0.0.0:8080 failed: port is already allocated`: DAppNode doesn't check ports before installing. Install
-again and pick a different port in the form (for example `8090`). To change the port later, use the package's
-**Network** tab in the DAppNode UI; that editor checks for collisions and rolls back if the port is taken.
+8080 is a popular port. DAppNode doesn't check ports before installing, so if another package already uses it the
+install fails with Docker's error, which names the port:
+
+```
+driver failed programming external connectivity on endpoint DAppNodePackage-gateway.searxng-lan.public.dappnode.eth
+(…): Bind for 0.0.0.0:8080 failed: port is already allocated
+```
+
+DAppNode then rolls the install back ("Aborted and rolled back"); no containers are left, so there is nothing to
+clean up. Install again and pick a different port in the form (for example `8090`). To change the port later, use
+the package's **Network** tab in the DAppNode UI; that editor checks for collisions and rolls back if the port is
+taken.
 
 ## Use it from your devices
 
