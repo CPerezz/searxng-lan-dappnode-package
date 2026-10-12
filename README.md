@@ -94,6 +94,37 @@ a file outside the repo.
 CI runs the package build and `tools/verify.sh quick` on amd64 and arm64 for every push and pull request. A weekly
 workflow opens a pull request when a newer SearXNG image is published; releases are published by hand.
 
+## Releasing (maintainer)
+
+Every published version is one mainnet transaction from the publisher address, which owns the package name.
+
+1. Merge any pending SearXNG bump PR, raise `version` in `dappnode_package.json`, and check that
+   `tools/leakcheck.sh all` is clean.
+2. On the DAppNode host, build and upload with the command above. It prints the **unsigned** release hash.
+3. Print the message to sign. It lists one `file cid` line per release file, in dappmanager's exact format:
+   ```sh
+   mkdir -p /tmp/sign && cp tools/sign-release.mjs tools/package.json tools/sign.html /tmp/sign/
+   docker run --rm --network dncore_network -v /tmp/sign:/app -w /app node:22-alpine sh -c \
+     "npm install --no-audit --no-fund >/dev/null 2>&1 && node sign-release.mjs message <unsigned-hash> > message.txt"
+   ```
+4. Sign with the publisher's wallet. Serve `/tmp/sign` (`python3 -m http.server 8765`) and open
+   `http://localhost:8765/sign.html?address=<publisher>` in the browser that has the wallet. Click *Sign*, then copy
+   the signature.
+5. Add `signature.json` to the release, pin it, and check the signer:
+   ```sh
+   docker run --rm --network dncore_network -v /tmp/sign:/app -w /app node:22-alpine sh -c \
+     "node sign-release.mjs assemble <unsigned-hash> <signature> && node sign-release.mjs verify <signed-hash> <publisher>"
+   ```
+   `assemble` prints the **signed** hash; `verify` must print the publisher address.
+6. Publish: open
+   `https://dappnode.github.io/sdk-publish/?r=searxng-lan.public.dappnode.eth&v=<version>&d=<publisher>&h=/ipfs/<signed-hash>`,
+   connect the publisher wallet and send the transaction. The first version calls `newRepoWithVersion` on the
+   `public.dappnode.eth` registry; later ones call `newVersion` on the package's own repo contract. Check the target
+   contract and the hash in the wallet before signing.
+7. Tag the commit `v<version>` and push the tag.
+
+Releases are pinned on the maintainer's DAppNode IPFS. While that node is offline, other nodes can't download them.
+
 ## License
 
 MIT for this packaging (see `LICENSE`). SearXNG itself is AGPL-3.0; this package runs the unmodified upstream image
