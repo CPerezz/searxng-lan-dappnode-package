@@ -70,6 +70,12 @@ check_static() { # fact pinned-image
   else
     fail "images not pinned (searxng '$sx', caddy '$caddy')"
   fi
+  # dappmanager matches the install form's port by "<container>/<PROTOCOL>": a bare containerPort is silently ignored.
+  if grep -E '^ *containerPort:' setup-wizard.yml | grep -v -E '"[0-9]+/(TCP|UDP)"' >/dev/null; then
+    fail "setup-wizard.yml has a containerPort without /TCP or /UDP (the user's port would be ignored)"
+  else
+    pass "install-form port targets name their protocol (dappmanager can apply the chosen port)"
+  fi
 }
 
 check_hidden_source() { # fact hidden-source-403: Docker's userland proxy hides IPv6/loopback clients

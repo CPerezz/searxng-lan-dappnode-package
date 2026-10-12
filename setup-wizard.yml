@@ -3,7 +3,9 @@ fields:
   - id: port
     target:
       type: portMapping
-      containerPort: "8080"
+      # Must include the protocol: dappmanager matches the user's port by "<container>/<PROTOCOL>", and a bare "8080"
+      # is silently ignored (the install keeps 8080).
+      containerPort: "8080/TCP"
       service: gateway
     title: Port on your home network
     description: >-
