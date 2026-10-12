@@ -59,6 +59,12 @@ clean up. Install again and pick a different port in the form (for example `8090
 the package's **Network** tab in the DAppNode UI; that editor checks for collisions and rolls back if the port is
 taken.
 
+### Updates
+
+When a new version is published, DAppNode offers it on the package page (or installs it automatically if you enabled
+auto-updates). Your install-form values, the port and the secret key carry over; SearXNG's settings come from the new
+image.
+
 ## Use it from your devices
 
 - **Any browser:** `http://dappnode.local:<port>` or `http://<your DAppNode's IP>:<port>`. If a device ever gets a
