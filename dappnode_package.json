@@ -9,7 +9,7 @@
     }
   ],
   "shortDescription": "Private SearXNG search for every device on your home network",
-  "description": "SearXNG is a metasearch engine: it asks Google, Bing, DuckDuckGo, Wikipedia and others for you and shows the combined results, without ads, tracking or profiling.\n\nThis package makes it usable by **every device on your home network**: open `http://dappnode.local:8080` (or `http://<your DAppNode's IP>:8080`) on a phone, laptop or TV browser, and add it as your browser's default search engine.\n\n- **Home network only.** A small gateway answers 403 to anything outside the allowed address ranges, including the internet through your router's UPnP port forward.\n- **Private.** Thumbnails load through your DAppNode, no search suggestions are sent while typing, and each install generates its own secret key.\n- **Optional outgoing proxy** (HTTP or SOCKS5) for the requests SearXNG sends to search engines.\n\nIf installing fails with \"port is already allocated\", another package already uses the port: choose a different one in the install form.",
+  "description": "SearXNG is a metasearch engine: it asks Google, Bing, DuckDuckGo, Wikipedia and others for you and shows the combined results, without ads, tracking or profiling.\n\nThis package makes it usable by **every device on your home network**: open `http://dappnode.local:<port>` (or `http://<your DAppNode's IP>:<port>`; the port is 8080 unless you chose another in the install form) on a phone, laptop or TV browser, and add it as your browser's default search engine.\n\n- **Home network only.** A small gateway answers 403 to anything outside the allowed address ranges, including the internet through your router's UPnP port forward.\n- **Private.** Thumbnails load through your DAppNode, no search suggestions are sent while typing, and each install generates its own secret key.\n- **Optional outgoing proxy** (HTTP or SOCKS5) for the requests SearXNG sends to search engines.\n\nIf installing fails with \"port is already allocated\", another package already uses the port: choose a different one in the install form.",
   "type": "service",
   "architectures": ["linux/amd64", "linux/arm64"],
   "mainService": "searxng",
@@ -17,11 +17,11 @@
   "categories": ["Communications"],
   "keywords": ["search", "privacy", "searxng", "metasearch", "home network", "lan"],
   "links": {
-    "ui": "http://dappnode.local:8080",
     "homepage": "https://github.com/CPerezz/searxng-lan-dappnode-package"
   },
-  "links": {
-    "homepage": "https://github.com/CPerezz/searxng-lan-dappnode-package"
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/CPerezz/searxng-lan-dappnode-package"
   },
   "bugs": {
     "url": "https://github.com/CPerezz/searxng-lan-dappnode-package/issues"
