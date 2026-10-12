@@ -1,0 +1,57 @@
+name: Bump SearXNG
+
+# SearXNG publishes no GitHub releases, only dated images (YYYY.M.D-commit), so this reads Docker Hub instead of
+# using dappnodesdk's bump-upstream. It only opens a pull request; releases are published by hand.
+on:
+  schedule:
+    - cron: "0 6 * * 1"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pull-requests: write
+  actions: write
+
+jobs:
+  bump:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Newest dated SearXNG image
+        id: v
+        run: |
+          tag=$(curl -fsS "https://hub.docker.com/v2/repositories/searxng/searxng/tags?page_size=50&ordering=last_updated" \
+            | jq -r '[.results[].name | select(test("^[0-9]{4}\\.[0-9]+\\.[0-9]+-[0-9a-f]+$"))] | first // empty')
+          current=$(sed -n 's/^ *SEARXNG_VERSION: *//p' docker-compose.yml)
+          [ -n "$tag" ] || { echo "no dated tag found on Docker Hub" >&2; exit 1; }
+          echo "tag=$tag" >> "$GITHUB_OUTPUT"
+          echo "current=$current" >> "$GITHUB_OUTPUT"
+          echo "current $current, newest $tag"
+
+      - name: Open or update the pull request
+        if: steps.v.outputs.tag != steps.v.outputs.current
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ steps.v.outputs.tag }}
+          CURRENT: ${{ steps.v.outputs.current }}
+        run: |
+          branch=bump-searxng
+          sed -i "s/$CURRENT/$TAG/" docker-compose.yml dappnode_package.json
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git checkout -B "$branch"
+          git commit -am "Bump SearXNG to $TAG"
+          git push -f origin "$branch"
+          if gh pr view "$branch" >/dev/null 2>&1; then
+            gh pr edit "$branch" --title "Bump SearXNG to $TAG"
+          else
+            gh pr create --head "$branch" --title "Bump SearXNG to $TAG" \
+              --body "SearXNG $CURRENT → $TAG (newest dated image on Docker Hub). CI runs on this branch; publishing a release stays manual."
+          fi
+          # Pull requests opened with GITHUB_TOKEN don't trigger workflows: run CI on the branch explicitly.
+          gh workflow run ci.yml --ref "$branch"
+
+      - name: Already current
+        if: steps.v.outputs.tag == steps.v.outputs.current
+        run: echo "SearXNG is already at ${{ steps.v.outputs.current }}"

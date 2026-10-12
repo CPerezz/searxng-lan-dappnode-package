@@ -19,3 +19,12 @@ search:
 ui:
   theme_args:
     simple_style: auto    # light/dark follows the device
+
+# Upstream ships only DuckDuckGo, Google CSE and Brave as general web engines (plus Wikipedia/Wikidata), and Brave
+# rate-limits quickly. Bing and Yahoo answered from a home connection in testing (2026-10-12); Google's direct engine
+# ("access denied") and Qwant (CAPTCHA) did not, so they stay disabled as upstream ships them.
+engines:
+  - name: bing
+    disabled: false
+  - name: yahoo
+    disabled: false

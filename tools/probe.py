@@ -87,13 +87,22 @@ for c in CHECKS:
         external = [s for s in srcs if s.startswith("http") and "image_proxy" not in s]
         check("thumbnails load through the instance (image proxy)", bool(proxied) and not external,
               f"{len(proxied)} proxied, {len(external)} direct third-party")
+    elif c == "image-sample":
+        # One proxied thumbnail link: url + h (= HMAC of url with the instance's secret). Both are public.
+        status, html = search("/search?q=cat&categories=images", lambda h: "image_proxy?url=" in h)
+        src = next((s for s in re.findall(r'src="([^"]+)"', html) if "image_proxy?url=" in s), "")
+        q = urllib.parse.parse_qs(urllib.parse.urlsplit(src.replace("&amp;", "&")).query)
+        sample = {"url": q.get("url", [""])[0], "h": q.get("h", [""])[0]}
+        print("SAMPLE " + json.dumps(sample))
+        check("got a proxied thumbnail link", bool(sample["url"] and sample["h"]), f"HTTP {status}")
     elif c == "autocomplete":
         status, body = get("/autocompleter?q=debi")
         try:
             data = json.loads(body) if body.strip() else []
         except ValueError:
             data = None
-        suggestions = data[1] if isinstance(data, list) and len(data) == 2 and isinstance(data[1], list) else data
+        # OpenSearch suggestions format: [query, [suggestions], ...]
+        suggestions = data[1] if isinstance(data, list) and len(data) >= 2 and isinstance(data[1], list) else data
         check("autocomplete returns no suggestions", status in (200, 204, 400) and not suggestions, f"HTTP {status}, {body[:60]!r}")
     elif c == "defaults":
         status, body = get("/config")

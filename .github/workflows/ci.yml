@@ -1,0 +1,33 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    strategy:
+      fail-fast: false
+      matrix:
+        runner: [ubuntu-24.04, ubuntu-24.04-arm]
+    runs-on: ${{ matrix.runner }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: DAppNode package build (validates manifest, compose and install form; both architectures)
+        if: matrix.runner == 'ubuntu-24.04'
+        run: npx -y @dappnode/dappnodesdk@0.3.55 build --skip_save --skip_upload
+
+      - name: Start the stack
+        run: docker compose -p sx-ci -f docker-compose.yml -f dev/compose.ci.yml up -d --build
+
+      - name: Smoke test (health, page, 403 from outside and from relayed sources, secret, hardening)
+        run: TARGET=ci tools/verify.sh quick
+
+      - name: Logs
+        if: failure()
+        run: docker compose -p sx-ci -f docker-compose.yml -f dev/compose.ci.yml logs --no-color | grep -v -i secret

@@ -91,20 +91,34 @@ check_private() { # fact private-instance
   fi
 }
 
-secret_fp() { # fingerprint of the key file and of the key the running process got
-  docker exec "$SX" sh -c "tr -d '\n' < /var/cache/searxng/secret_key | sha256sum | cut -c1-12; \
-    tr '\0' '\n' < /proc/1/environ | sed -n 's/^SEARXNG_SECRET=//p' | tr -d '\n' | sha256sum | cut -c1-12" | tr '\n' ' '
+secret_fp() { # fingerprint of the stored key (never the key itself)
+  docker exec "$SX" sh -c "tr -d '\n' < /var/cache/searxng/secret_key | sha256sum | cut -c1-12"
+}
+
+hmac_proof() { # SearXNG signs each image-proxy link with its secret: recompute that HMAC with the stored key
+  local sample
+  sample=$(docker run --rm --network $ALLOWED_NET -v "$PWD/tools/probe.py:/probe.py:ro" "$PY" \
+           python -u /probe.py "http://$ALLOWED_IP:8080" image-sample 2>/dev/null | sed -n 's/^SAMPLE //p')
+  [ -n "$sample" ] || { echo "no-sample"; return; }
+  docker exec -e S="$sample" "$SX" /usr/local/searxng/.venv/bin/python -c '
+import hashlib, hmac, json, os
+s = json.loads(os.environ["S"]); key = open("/var/cache/searxng/secret_key").read().strip()
+ok = s["url"] and hmac.compare_digest(hmac.new(key.encode(), s["url"].encode(), hashlib.sha256).hexdigest(), s["h"])
+print("match" if ok else "mismatch")'
 }
 
 check_secret() { # facts secret, persistence (restart/recreate)
-  local len fp file env placeholder img fresh
+  local len file fp placeholder img fresh proof
   len=$(docker exec "$SX" sh -c 'wc -c < /var/cache/searxng/secret_key' | tr -d ' ')
-  read -r file env <<<"$(secret_fp)"
+  file=$(secret_fp)
   placeholder=$(printf %s ultrasecretkey | sha256sum | cut -c1-12)
-  if [ "${len:-0}" -ge 32 ] && [ "$file" = "$env" ] && [ "$file" != "$placeholder" ]; then
-    pass "per-install secret: $len chars, in use by SearXNG, not the placeholder (fingerprint $file)"
-  else
-    fail "secret: length ${len:-?}, file $file, process $env"
+  [ "${len:-0}" -ge 32 ] && [ "$file" != "$placeholder" ] \
+    && pass "per-install secret: $len random characters, not the placeholder (fingerprint $file)" \
+    || fail "secret: length ${len:-?}, fingerprint $file"
+  if [ "$MODE" != quick ]; then
+    proof=$(hmac_proof)
+    [ "$proof" = match ] && pass "SearXNG signs image-proxy links with that secret (HMAC recomputed)" \
+      || fail "image-proxy HMAC with the stored secret: $proof"
   fi
   img=$(docker inspect -f '{{.Config.Image}}' "$SX")
   docker run -d --name sx-test-fresh --user 977:977 --cap-drop ALL --security-opt no-new-privileges "$img" >/dev/null
@@ -115,11 +129,15 @@ check_secret() { # facts secret, persistence (restart/recreate)
     || fail "fresh install secret: $fresh (this one: $file)"
   docker restart "$SX" >/dev/null && wait_healthy || { fail "searxng not healthy after restart"; return; }
   fp=$(secret_fp)
-  [ "$fp" = "$file $env " ] && pass "secret unchanged after restart" || fail "secret changed after restart ($fp)"
+  [ "$fp" = "$file" ] && pass "secret unchanged after restart" || fail "secret changed after restart ($fp)"
   if [ -n "${COMPOSE+x}" ]; then
     "${COMPOSE[@]}" up -d --force-recreate searxng >/dev/null 2>&1 && wait_healthy || { fail "not healthy after recreate"; return; }
     fp=$(secret_fp)
-    [ "$fp" = "$file $env " ] && pass "secret unchanged after recreating the container" || fail "secret changed after recreate ($fp)"
+    [ "$fp" = "$file" ] && pass "secret unchanged after recreating the container" || fail "secret changed after recreate ($fp)"
+    if [ "$MODE" != quick ]; then
+      proof=$(hmac_proof)
+      [ "$proof" = match ] && pass "after recreate, SearXNG still signs with the same secret" || fail "HMAC after recreate: $proof"
+    fi
   fi
 }
 
@@ -133,7 +151,7 @@ check_hardening() { # fact hardening
     net=$(docker inspect -f '{{.HostConfig.NetworkMode}}' "$c")
     devs=$(docker inspect -f '{{range .HostConfig.Devices}}{{.PathOnHost}} {{end}}' "$c")
     sock=$(docker inspect -f '{{range .Mounts}}{{.Source}} {{end}}' "$c" | grep -c docker.sock || true)
-    uids=$(docker top "$c" -o uid | tail -n +2 | sort -u | tr '\n' ' ')
+    uids=$(docker top "$c" -o pid,uid | tail -n +2 | awk '{print $2}' | sort -u | tr '\n' ' ')
     if [[ $sec == *no-new-privileges* && ( $add == null || $add == '[]' ) && $drop == *ALL* && $priv == false \
           && $net != host && -z $devs && $sock == 0 && " $uids" != *" 0 "* && -n $uids ]]; then
       pass "$c hardened: no-new-privileges, all capabilities dropped, process uids $uids"

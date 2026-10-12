@@ -25,6 +25,8 @@ flowchart LR
 - **SearXNG** (official image, pinned to a dated version) runs as an unprivileged user behind the gateway. Its settings
   live in the image and are applied on every start, so package updates take effect. Only the secret key is kept,
   in the `searxng-data` volume.
+- Engines: SearXNG's defaults plus **Bing and Yahoo**. Upstream's default general engines are few, and Brave
+  rate-limits quickly; Google's direct engine and Qwant stay disabled (access denied / CAPTCHA from home connections).
 - Both containers run with all Linux capabilities dropped and `no-new-privileges`.
 
 ## Install
@@ -70,6 +72,7 @@ Everything below runs on a DAppNode host (or any Docker host for the CI target).
 docker compose -p sx-dev -f docker-compose.yml -f dev/compose.override.yml up -d --build
 tools/verify.sh                     # all automated checks (TARGET=dev by default)
 TARGET=package PORT=8080 tools/verify.sh   # against the installed package
+tools/lan-check.sh <dappnode-ip> <port>    # from a laptop on the home network: page + OpenSearch on both addresses
 docker compose -p sx-dev -f docker-compose.yml -f dev/compose.override.yml down -v   # before installing the package
 
 # build and upload a release to the node's IPFS; install or update by hash in the DAppNode UI
