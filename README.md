@@ -74,6 +74,11 @@ image.
   under Settings → Search.
 - **Chrome / Edge:** open the page once and run a search; it then appears under Settings → Search engine → Manage
   search engines (site search). Choose *Make default*.
+- **Brave (desktop):** `brave://settings/searchEngines` → *Site search* → **Add**: name `SearXNG`, URL
+  `http://dappnode.local:<port>/search?q=%s` → ⋮ → *Make default*. (After one search on the page it may already be
+  listed under inactive shortcuts: activate it.)
+- **Brave (iPhone):** Settings → Search Engines → Standard Tab → *Add Custom Search Engine* with the same URL.
+  **Brave (Android):** search once on the page, then pick it under Settings → Search engines → Standard tab.
 - **iPhone / iPad Safari:** Safari doesn't allow custom search engines. Add the page to your home screen (Share →
   Add to Home Screen) or bookmark it.
 
