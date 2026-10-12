@@ -111,7 +111,9 @@ Every published version is one mainnet transaction from the publisher address, w
 
 1. Merge any pending SearXNG bump PR, raise `version` in `dappnode_package.json`, and check that
    `tools/leakcheck.sh all` is clean.
-2. On the DAppNode host, build and upload with the command above. It prints the **unsigned** release hash.
+2. On the DAppNode host, build and upload with the command above. It prints the **unsigned** release hash. Then
+   `tools/leakcheck.sh release build_searxng-lan.public.dappnode.eth_<version>` must report clean (with the
+   maintainer's pattern file present on that host).
 3. Print the message to sign. It lists one `file cid` line per release file, in dappmanager's exact format:
    ```sh
    mkdir -p /tmp/sign && cp tools/sign-release.mjs tools/package.json tools/sign.html /tmp/sign/

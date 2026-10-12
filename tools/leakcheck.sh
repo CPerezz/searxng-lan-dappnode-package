@@ -6,14 +6,16 @@
 # Hits are reported as location and pattern number, never the pattern text.
 #
 # usage: tools/leakcheck.sh staged|tree|history|all
-#        tools/leakcheck.sh dir <path>   # recursive; unpacks tar/txz/tgz archives (release files, image layers)
+#        tools/leakcheck.sh release <build-dir>   # what this repo puts into a release: metadata files, each image's
+#                                                 # config (env, labels, history) and the files our Dockerfiles copy in.
+#                                                 # Upstream base layers are not scanned: their contents aren't ours.
 set -euo pipefail
 export LC_ALL=C
 
 patterns="${SXLAN_LEAK_PATTERNS:-$HOME/.config/searxng-lan/leak-patterns.txt}"
 [ -s "$patterns" ] || { echo "leakcheck: no patterns at $patterns; refusing to pass" >&2; exit 2; }
 work="$(mktemp -d)"
-trap 'rm -rf "$work"' EXIT
+trap 'chmod -R u+w "$work" 2>/dev/null; rm -rf "$work"' EXIT   # unpacked image layers contain read-only dirs
 grep -v -e '^[[:space:]]*$' -e '^#' "$patterns" > "$work/pats" || true
 [ -s "$work/pats" ] || { echo "leakcheck: pattern file has no patterns; refusing to pass" >&2; exit 2; }
 : > "$work/hits"
@@ -56,26 +58,28 @@ scan_history() {
     case "$e" in *@users.noreply.github.com) ;; *) echo "LEAK history: an author/committer email is not a GitHub noreply address" | tee -a "$work/hits" ;; esac
   done < <(git log --all --format='%ae%n%ce' 2>/dev/null | sort -u)
 }
-unpack_all() { # $1 dir; unpack every archive found, up to 4 levels (txz -> image tar -> layer tar)
-  local depth found f
-  for depth in 1 2 3 4; do
-    found=0
-    while IFS= read -r -d '' f; do
-      case "$f" in *.x/*) ;; esac
-      [ -e "$f.x" ] && continue
-      if tar -tf "$f" >/dev/null 2>&1; then
-        mkdir -p "$f.x" && { tar -xf "$f" -C "$f.x" 2>/dev/null || true; }
-        found=1
-      fi
-    done < <(find "$1" -type f -size +0 -print0)
-    [ "$found" = 1 ] || break
+# Files our Dockerfiles copy into the images (gateway/Dockerfile, searxng/Dockerfile). /usr/bin/caddy is the
+# upstream binary with only its file capability stripped, so it isn't ours to scan.
+OWN_FILES="etc/caddy/Caddyfile usr/local/bin/gateway-entrypoint usr/local/searxng/searxng-lan-settings.yml usr/local/bin/searxng-lan-entrypoint"
+scan_release() {
+  local d="$1" f img blob own
+  for f in "$d"/*; do
+    case "$f" in *.txz|*.tar.xz) continue ;; esac
+    grep -aniF -f "$work/pats" -- "$f" | sed "s|^|$(basename "$f"):|" | report release || true
   done
-}
-scan_dir() {
-  cp -R "$1" "$work/d"
-  unpack_all "$work/d"
-  grep -raniF -f "$work/pats" "$work/d" | sed "s|$work/d/||" | report dir || true
-  (cd "$work/d" && find . | grep -aiF -f "$work/pats" | sed 's/^/path:/') | report dir-path || true
+  for f in "$d"/*.txz; do
+    img="$work/img" && rm -rf "$img" && mkdir -p "$img"
+    xz -dc "$f" | tar -x -C "$img"
+    for blob in $(grep -o '"Config":"[^"]*"' "$img/manifest.json" | cut -d'"' -f4); do
+      grep -aniF -f "$work/pats" -- "$img/$blob" | sed "s|^|$(basename "$f"):image-config:|" | report release || true
+    done
+    for blob in $(grep -o '"Layers":\[[^]]*\]' "$img/manifest.json" | grep -o 'blobs/sha256/[0-9a-f]*'); do
+      for own in $OWN_FILES; do
+        tar -xOf "$img/$blob" "$own" 2>/dev/null | grep -aniF -f "$work/pats" | sed "s|^|$(basename "$f"):/$own:|" | report release || true
+      done
+    done
+    chmod -R u+w "$img" 2>/dev/null; rm -rf "$img"
+  done
 }
 
 case "${1:-}" in
@@ -83,8 +87,8 @@ case "${1:-}" in
   tree) scan_tree ;;
   history) scan_history ;;
   all) scan_tree; scan_history ;;
-  dir) [ -n "${2:-}" ] || { echo "usage: $0 dir <path>" >&2; exit 2; }; scan_dir "$2" ;;
-  *) echo "usage: $0 staged|tree|history|all|dir <path>" >&2; exit 2 ;;
+  release) [ -d "${2:-}" ] || { echo "usage: $0 release <build-dir>" >&2; exit 2; }; scan_release "$2" ;;
+  *) echo "usage: $0 staged|tree|history|all|release <build-dir>" >&2; exit 2 ;;
 esac
 
 hits=$(wc -l < "$work/hits" | tr -d ' ')
