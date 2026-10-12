@@ -1,0 +1,10 @@
+{
+  "name": "searxng-lan-release-tools",
+  "private": true,
+  "type": "module",
+  "engines": { "node": ">=22" },
+  "dependencies": {
+    "ethers": "6.17.0",
+    "multiformats": "13.4.2"
+  }
+}
