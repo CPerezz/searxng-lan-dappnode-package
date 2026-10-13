@@ -8,6 +8,11 @@ on your DAppNode so that **every device on your home network** can use it: phone
 - Thumbnails load through your DAppNode (image proxy), nothing is sent while you type (no autocomplete), and each
   install generates its own secret key.
 
+<p align="center">
+  <img src="docs/screenshot-home.png" alt="SearXNG start page served by the package" width="49%">
+  <img src="docs/screenshot-results.png" alt="Search results combined from several engines" width="49%">
+</p>
+
 ## How it's built
 
 ```mermaid
@@ -31,7 +36,8 @@ flowchart LR
 
 ## Install
 
-Install `searxng-lan.public.dappnode.eth` from the DAppStore. The install form asks for:
+Install `searxng-lan.public.dappnode.eth` from the DAppStore: enter that name in the DAppStore search, or open
+`http://dappnode.local/installer/public/searxng-lan.public.dappnode.eth`. The install form asks for:
 
 | Field | Default | Notes |
 |---|---|---|
@@ -103,7 +109,9 @@ docker run --rm --network dncore_network -v /var/run/docker.sock:/var/run/docker
 a file outside the repo.
 
 CI runs the package build and `tools/verify.sh quick` on amd64 and arm64 for every push and pull request. A weekly
-workflow opens a pull request when a newer SearXNG image is published; releases are published by hand.
+workflow opens a pull request when a newer SearXNG image is published. Pushing a `v<version>` tag creates the GitHub
+release, with notes read from the chain (it fails if that version isn't published). Releases themselves are built,
+signed and published by hand, below.
 
 ## Releasing (maintainer)
 
@@ -120,21 +128,25 @@ Every published version is one mainnet transaction from the publisher address, w
    docker run --rm --network dncore_network -v /tmp/sign:/app -w /app node:22-alpine sh -c \
      "npm install --no-audit --no-fund >/dev/null 2>&1 && node sign-release.mjs message <unsigned-hash> > message.txt"
    ```
-4. Sign with the publisher's wallet. Serve `/tmp/sign` (`python3 -m http.server 8765`) and open
-   `http://localhost:8765/sign.html?address=<publisher>` in the browser that has the wallet. Click *Sign*, then copy
-   the signature.
+4. Sign with the publisher's wallet. Copy `sign.html` and `message.txt` from `/tmp/sign` to the computer with the
+   wallet, serve that folder there (`python3 -m http.server 8765 --bind 127.0.0.1`) and open
+   `http://127.0.0.1:8765/sign.html?address=<publisher>` in the browser that has the wallet. Click *Sign with my
+   wallet*: the wallet shows the same `file cid` lines as a plain message signature (no transaction). Copy the
+   signature.
 5. Add `signature.json` to the release, pin it, and check the signer:
    ```sh
    docker run --rm --network dncore_network -v /tmp/sign:/app -w /app node:22-alpine sh -c \
      "node sign-release.mjs assemble <unsigned-hash> <signature> && node sign-release.mjs verify <signed-hash> <publisher>"
    ```
-   `assemble` prints the **signed** hash; `verify` must print the publisher address.
+   `assemble` prints the **signed** hash; `verify` must print the publisher address. `npm install` left root-owned
+   files: clean up with `docker run --rm -v /tmp:/t alpine:3.22 rm -rf /t/sign`.
 6. Publish: open
    `https://dappnode.github.io/sdk-publish/?r=searxng-lan.public.dappnode.eth&v=<version>&d=<publisher>&h=/ipfs/<signed-hash>`,
    connect the publisher wallet and send the transaction. The first version calls `newRepoWithVersion` on the
    `public.dappnode.eth` registry; later ones call `newVersion` on the package's own repo contract. Check the target
    contract and the hash in the wallet before signing.
-7. Tag the commit `v<version>` and push the tag.
+7. Once the transaction is mined, tag the commit `v<version>` and push the tag; the Release workflow creates the
+   GitHub release from the chain.
 
 Releases are pinned on the maintainer's DAppNode IPFS. While that node is offline, other nodes can't download them.
 
