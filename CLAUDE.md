@@ -199,8 +199,10 @@ cast call 0x5f4eC3Df9cbd43714FE2740f5E3616155c5b8419 "latestAnswer()(int256)" --
 - `cast tx <hash> from` is the publisher.
 - The `Release` workflow run is green, and `gh release view v<version>` shows the hash.
 - If the maintainer hasn't enabled auto-updates, he updates from the package page. Rerun the package suite.
-- The release is pinned only on the maintainer's DAppNode IPFS. Never unpin old releases: installed nodes may still
-  fetch them.
+- Releases are pinned only on the maintainer's DAppNode IPFS. Its update daemon checks installed packages by name
+  and version (`daemons/dist/autoUpdates/updateMyPackages.js`, origin is ignored). When it sees a newer version, it
+  pins the new release and **unpins the previous one**. After that, older versions survive only until IPFS garbage
+  collection. To keep an old version installable by hash, re-pin it (`ipfs pin add`; never `repo gc`).
 
 ## Traps already hit
 
