@@ -50,6 +50,9 @@ the installer asks you to accept "bypass unsigned restriction". To verify releas
 under DAppNode's trusted release keys: name `cperezz.eth`, suffix `.public.dappnode.eth`, protocol `ECDSA_256`, key
 `0x3211695ED0b0c277E7340dA9A6ED025463774797`.
 
+Releases are served from the maintainer's DAppNode over IPFS. While that node is offline, other nodes can't download
+them.
+
 ### If the port is taken
 
 8080 is a popular port. DAppNode doesn't check ports before installing, so if another package already uses it the
@@ -110,45 +113,8 @@ a file outside the repo.
 
 CI runs the package build and `tools/verify.sh quick` on amd64 and arm64 for every push and pull request. A weekly
 workflow opens a pull request when a newer SearXNG image is published. Pushing a `v<version>` tag creates the GitHub
-release, with notes read from the chain (it fails if that version isn't published). Releases themselves are built,
-signed and published by hand, below.
-
-## Releasing (maintainer)
-
-Every published version is one mainnet transaction from the publisher address, which owns the package name.
-
-1. Merge any pending SearXNG bump PR, raise `version` in `dappnode_package.json`, and check that
-   `tools/leakcheck.sh all` is clean.
-2. On the DAppNode host, build and upload with the command above. It prints the **unsigned** release hash. Then
-   `tools/leakcheck.sh release build_searxng-lan.public.dappnode.eth_<version>` must report clean (with the
-   maintainer's pattern file present on that host).
-3. Print the message to sign. It lists one `file cid` line per release file, in dappmanager's exact format:
-   ```sh
-   mkdir -p /tmp/sign && cp tools/sign-release.mjs tools/package.json tools/sign.html /tmp/sign/
-   docker run --rm --network dncore_network -v /tmp/sign:/app -w /app node:22-alpine sh -c \
-     "npm install --no-audit --no-fund >/dev/null 2>&1 && node sign-release.mjs message <unsigned-hash> > message.txt"
-   ```
-4. Sign with the publisher's wallet. Copy `sign.html` and `message.txt` from `/tmp/sign` to the computer with the
-   wallet, serve that folder there (`python3 -m http.server 8765 --bind 127.0.0.1`) and open
-   `http://127.0.0.1:8765/sign.html?address=<publisher>` in the browser that has the wallet. Click *Sign with my
-   wallet*: the wallet shows the same `file cid` lines as a plain message signature (no transaction). Copy the
-   signature.
-5. Add `signature.json` to the release, pin it, and check the signer:
-   ```sh
-   docker run --rm --network dncore_network -v /tmp/sign:/app -w /app node:22-alpine sh -c \
-     "node sign-release.mjs assemble <unsigned-hash> <signature> && node sign-release.mjs verify <signed-hash> <publisher>"
-   ```
-   `assemble` prints the **signed** hash; `verify` must print the publisher address. `npm install` left root-owned
-   files: clean up with `docker run --rm -v /tmp:/t alpine:3.22 rm -rf /t/sign`.
-6. Publish: open
-   `https://dappnode.github.io/sdk-publish/?r=searxng-lan.public.dappnode.eth&v=<version>&d=<publisher>&h=/ipfs/<signed-hash>`,
-   connect the publisher wallet and send the transaction. The first version calls `newRepoWithVersion` on the
-   `public.dappnode.eth` registry; later ones call `newVersion` on the package's own repo contract. Check the target
-   contract and the hash in the wallet before signing.
-7. Once the transaction is mined, tag the commit `v<version>` and push the tag; the Release workflow creates the
-   GitHub release from the chain.
-
-Releases are pinned on the maintainer's DAppNode IPFS. While that node is offline, other nodes can't download them.
+release, with notes read from the chain (it fails if that version isn't published). Releases are built, signed and
+published by the maintainer; the procedure is in `CLAUDE.md`.
 
 ## License
 

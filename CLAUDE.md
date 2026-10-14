@@ -1,9 +1,9 @@
 # CLAUDE.md: handover for AI agents
 
 This repo is the DAppNode package `searxng-lan.public.dappnode.eth`: SearXNG behind a Caddy gateway that only answers
-home-network addresses. Read `README.md` first: it covers the user view, the architecture and the maintainer's release
-steps. This file adds what an agent needs on top: the rules, every action with its procedure, and the traps already
-hit.
+home-network addresses. Read `README.md` first: it covers the user view, the architecture and the dev commands.
+This file adds what an agent and the maintainer need on top: the rules, every action with its procedure (including
+releases), and the traps already hit.
 
 ## Rules
 
@@ -132,38 +132,64 @@ docker compose -p sx-dev -f docker-compose.yml -f dev/compose.override.yml down 
 
 ### Release (publish a new version)
 
-Follow README "Releasing" steps 1–7. The agent-specific parts:
+Every published version is one mainnet transaction from the publisher, who owns the package name. The maintainer makes
+the two signatures (steps 4 and 7); the agent prepares and verifies everything around them.
 
-1. **Version.** The on-chain repo only accepts a bump of exactly one of major/minor/patch by 1, with the lower parts
-   reset to 0. Raise `version` in `dappnode_package.json` and commit.
-2. **Build, install by hash and run the suite** (above). Then run the release leakcheck.
-3. **Message.** Produce `message.txt` with `sign-release.mjs message <unsigned-hash>`. Copy `sign.html` and
-   `message.txt` to the maintainer's workstation and serve them on `127.0.0.1` (wallet extensions don't inject into
-   `file://`). Give him the URL `http://127.0.0.1:8765/sign.html?address=0x3211695ED0b0c277E7340dA9A6ED025463774797`.
-   - Tell him what he signs: one `file cid` line per release file, sorted, without `signature.json`. It's a plain
-     `personal_sign`, not a transaction.
-4. **Signature.** Check it locally with `cast wallet verify --address <publisher> "$(cat message.txt)" <sig>`. Then
-   `assemble` it on the host, which yields the signed hash, pinned, and run `verify`.
-   - Also verify with dappmanager's own code. Run its image in a throwaway container, from
-     `/usr/src/app/packages/toolkit`, with this `.mjs`:
-     ```js
-     import { CID } from "multiformats/cid";
-     import { serializeIpfsDirectory, getReleaseSigningKey } from "./dist/repository/releaseSignature.js";
-     const api = (p) => fetch(`http://ipfs.dappnode:5001/api/v0/${p}`, { method: "POST" });
-     const ls = await (await api(`ls?arg=${process.argv[2]}`)).json();
-     const files = ls.Objects[0].Links.map((l) => ({ name: l.Name, cid: CID.parse(l.Hash) }));
-     const sig = JSON.parse(await (await api(`cat?arg=${files.find((f) => f.name === "signature.json").cid}`)).text());
-     console.log(getReleaseSigningKey(serializeIpfsDirectory(files, sig.cid), sig.signature, sig.signature_protocol));
-     ```
-     Pipe it in (`docker run --rm -i --network dncore_network --entrypoint sh <dappmanager-image> -c 'cd
-     /usr/src/app/packages/toolkit && cat > v.mjs && node v.mjs <signed-hash>' < v.mjs`). It must print the
-     publisher address.
-5. **Update test.** The maintainer updates his install to the signed hash (by-hash link). Expect: trusted, no bypass
+1. **Version.** Merge any pending SearXNG bump PR. Raise `version` in `dappnode_package.json`. The on-chain repo only
+   accepts a bump of exactly one of major/minor/patch by 1, with the lower parts reset to 0. Commit and push once
+   `tools/leakcheck.sh all` is clean.
+2. **Build, install by hash and run the suite** (above). The build prints the **unsigned** release hash. Then run
+   the release leakcheck.
+3. **Message.** On the host:
+   ```sh
+   mkdir -p /tmp/sign && cp tools/sign-release.mjs tools/package.json tools/sign.html /tmp/sign/
+   docker run --rm --network dncore_network -v /tmp/sign:/app -w /app node:22-alpine sh -c \
+     "npm install --no-audit --no-fund >/dev/null 2>&1 && node sign-release.mjs message <unsigned-hash> > message.txt"
+   ```
+   It holds one `file cid` line per release file, sorted, without `signature.json`, in dappmanager's exact format.
+4. **The maintainer signs.**
+   - Copy `sign.html` and `message.txt` from `/tmp/sign` to his workstation and serve them there with
+     `python3 -m http.server 8765 --bind 127.0.0.1`. Wallet extensions don't inject into `file://`.
+   - Give him `http://127.0.0.1:8765/sign.html?address=0x3211695ED0b0c277E7340dA9A6ED025463774797`. He clicks *Sign
+     with my wallet*.
+   - Tell him what he signs: the wallet shows the same lines as a plain `personal_sign` (no transaction, no gas).
+   - He pastes the signature back.
+5. **Check and assemble.**
+   1. Locally: `cast wallet verify --address <publisher> "$(cat message.txt)" <sig>`.
+   2. On the host:
+      ```sh
+      docker run --rm --network dncore_network -v /tmp/sign:/app -w /app node:22-alpine \
+        node sign-release.mjs assemble <unsigned-hash> <signature>      # prints the signed hash
+      docker run --rm --network dncore_network -v /tmp/sign:/app -w /app node:22-alpine \
+        node sign-release.mjs verify <signed-hash> <publisher>          # must print the publisher address
+      ```
+      `assemble` adds `signature.json`, uploads the new folder and pins it.
+   3. Verify with dappmanager's own code too. Run its image in a throwaway container, from
+      `/usr/src/app/packages/toolkit`, with this `.mjs`:
+      ```js
+      import { CID } from "multiformats/cid";
+      import { serializeIpfsDirectory, getReleaseSigningKey } from "./dist/repository/releaseSignature.js";
+      const api = (p) => fetch(`http://ipfs.dappnode:5001/api/v0/${p}`, { method: "POST" });
+      const ls = await (await api(`ls?arg=${process.argv[2]}`)).json();
+      const files = ls.Objects[0].Links.map((l) => ({ name: l.Name, cid: CID.parse(l.Hash) }));
+      const sig = JSON.parse(await (await api(`cat?arg=${files.find((f) => f.name === "signature.json").cid}`)).text());
+      console.log(getReleaseSigningKey(serializeIpfsDirectory(files, sig.cid), sig.signature, sig.signature_protocol));
+      ```
+      Pipe it in (`docker run --rm -i --network dncore_network --entrypoint sh <dappmanager-image> -c 'cd
+      /usr/src/app/packages/toolkit && cat > v.mjs && node v.mjs <signed-hash>' < v.mjs`). It must print the
+      publisher address.
+6. **Update test.** The maintainer updates his install to the signed hash (by-hash link). Expect: trusted, no bypass
    checkbox, port kept. Then run the package suite and confirm the secret fingerprint is unchanged.
-6. **Simulate** (next section), show him the result, then give him the sdk-publish link from README step 6.
-7. **After the transaction is mined,** verify it (see "After publishing"), then tag and push:
+7. **Simulate, then the maintainer publishes.**
+   1. Simulate (next section) and show him the decoded call, the gas and the cost.
+   2. He opens
+      `https://dappnode.github.io/sdk-publish/?r=searxng-lan.public.dappnode.eth&v=<version>&d=<publisher>&h=/ipfs/<signed-hash>`
+      and connects the publisher wallet; the form only appears after he connects.
+   3. Before sending, he checks the target contract, function, value 0 and hash in the wallet.
+   4. He gives you the transaction hash.
+8. **After the transaction is mined,** verify it (see "After publishing"), then tag and push:
    `git tag v<version> && git push origin v<version>`. `release.yml` creates the GitHub release.
-8. Clean up on the host: `/tmp/sign` holds root-owned files, so remove it with
+9. **Clean up on the host.** `/tmp/sign` holds root-owned files, so remove it with
    `docker run --rm -v /tmp:/t alpine:3.22 rm -rf /t/sign`. Delete the build dir and any copied pattern file.
 
 ### Simulate the publish transaction
