@@ -163,7 +163,8 @@ the two signatures (steps 4 and 7); the agent prepares and verifies everything a
       docker run --rm --network dncore_network -v /tmp/sign:/app -w /app node:22-alpine \
         node sign-release.mjs verify <signed-hash> <publisher>          # must print the publisher address
       ```
-      `assemble` adds `signature.json`, uploads the new folder and pins it.
+      `assemble` adds `signature.json` and pins the new folder. It stores both the same way the sdk-publish page does,
+      so with the same signature the page arrives at this exact hash (see step 7).
    3. Verify with dappmanager's own code too. Run its image in a throwaway container, from
       `/usr/src/app/packages/toolkit`, with this `.mjs`:
       ```js
@@ -181,12 +182,16 @@ the two signatures (steps 4 and 7); the agent prepares and verifies everything a
 6. **Update test.** The maintainer updates his install to the signed hash (by-hash link). Expect: trusted, no bypass
    checkbox, port kept. Then run the package suite and confirm the secret fingerprint is unchanged.
 7. **Simulate, then the maintainer publishes.**
-   1. Simulate (next section) and show him the decoded call, the gas and the cost.
-   2. He opens
-      `https://dappnode.github.io/sdk-publish/?r=searxng-lan.public.dappnode.eth&v=<version>&d=<publisher>&h=/ipfs/<signed-hash>`
+   1. Simulate (next section) with the signed hash and show him the decoded call, the gas and the cost.
+   2. He opens the page with the **unsigned** hash:
+      `https://dappnode.github.io/sdk-publish/?r=searxng-lan.public.dappnode.eth&v=<version>&d=<publisher>&h=/ipfs/<unsigned-hash>`,
       and connects the publisher wallet; the form only appears after he connects.
-   3. Before sending, he checks the target contract, function, value 0 and hash in the wallet.
-   4. He gives you the transaction hash.
+   3. He clicks *Sign release*. The wallet shows the same `file cid` lines as step 4, and he signs them again
+      (deterministic ECDSA: same signature).
+   4. He checks that the page's "Signed Release hash" equals the signed hash from step 5. If it differs, he stops.
+   5. He clicks *Publish*. Before sending, he checks the target contract, function, value 0 and the hash in the
+      wallet.
+   6. He gives you the transaction hash.
 8. **After the transaction is mined,** verify it (see "After publishing"), then tag and push:
    `git tag v<version> && git push origin v<version>`. `release.yml` creates the GitHub release.
 9. **Clean up on the host.** `/tmp/sign` holds root-owned files, so remove it with
@@ -250,5 +255,9 @@ cast call 0x5f4eC3Df9cbd43714FE2740f5E3616155c5b8419 "latestAnswer()(int256)" --
   this package as signed by an unknown key unless they add the maintainer's.
 - **Unpacked image layers contain read-only directories.** Run `chmod -R u+w` before `rm -rf`, as `leakcheck.sh`
   does.
+- **sdk-publish refuses a signed release** ("Release is already signed"). Its Publish button appears only after its
+  own *Sign release* step, which adds `signature.json` itself, so it must get the unsigned hash. Seen on the first
+  publish (2026-10-16). `assemble` used to write through MFS, which stores `signature.json` differently: same bytes,
+  but a different hash than the page's.
 - **DAppNode's networks:** `dncore_network` is `172.33.0.0/16`, the OpenVPN pool `172.33.8.0/22`, WireGuard
   `10.24.0.0/24`. The default `ALLOWED_NETWORKS` covers all of them. VPN access is untested.

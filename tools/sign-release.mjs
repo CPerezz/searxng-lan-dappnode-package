@@ -117,29 +117,22 @@ async function cmdVerify(rootCid, expectedAddress) {
   }
 }
 
-/** Write `content` as a file into IPFS MFS at `mfsPath` (creating it). Returns the file's own CID. */
-async function mfsWriteFile(mfsPath, content) {
+/** POST `content` as the multipart "file" field, as kubo's add and dag/put expect. */
+function fileForm(content, name) {
   const form = new FormData();
-  form.append("file", new Blob([content]), "file");
-  const res = await ipfsApi(
-    `/api/v0/files/write?arg=${encodeURIComponent(mfsPath)}&create=true&parents=true`,
-    { body: form }
-  );
-  await res.text();
+  form.append("file", new Blob([content]), name);
+  return { body: form };
 }
 
-async function mfsStatHash(mfsPath) {
-  const json = await (await ipfsApi(`/api/v0/files/stat?arg=${encodeURIComponent(mfsPath)}&hash=true`)).json();
-  return json.Hash;
-}
-
+// Builds the signed release exactly like the sdk-publish page's "Sign release" step (dappnode.github.io/sdk-publish):
+// plain `add` of signature.json (kubo defaults), its link appended to the unsigned root, links sorted by name, root
+// stored as dag-pb. The same signature therefore yields the same CID here and on the page, which is what gets published.
 async function cmdAssemble(rootCid, signatureHex, args) {
   const opts = parseCidOpts(args);
   const entries = await listDirectory(rootCid);
   if (entries.some((e) => SIGNATURE_FILE_RE.test(e.name))) {
     throw new Error(`${rootCid} already contains a signature.json; assemble expects an unsigned release`);
   }
-  const message = serializeIpfsDirectory(entries, opts);
   const signature = {
     version: 1,
     cid: opts,
@@ -147,23 +140,19 @@ async function cmdAssemble(rootCid, signatureHex, args) {
     signature: signatureHex,
   };
 
-  const mfsDir = `/sign-release-${Date.now()}-${Math.random().toString(36).slice(2)}`;
-  await ipfsApi(`/api/v0/files/cp?arg=${encodeURIComponent(`/ipfs/${rootCid}`)}&arg=${encodeURIComponent(mfsDir)}`);
-  try {
-    await mfsWriteFile(`${mfsDir}/signature.json`, JSON.stringify(signature, null, 2));
-    const newRootCid = await mfsStatHash(mfsDir);
-    await ipfsApi(`/api/v0/pin/add?arg=${newRootCid}`);
+  const added = await (await ipfsApi(`/api/v0/add?pin=false`, fileForm(JSON.stringify(signature, null, 2), "signature.json"))).json();
+  const root = await (await ipfsApi(`/api/v0/dag/get?arg=${rootCid}`)).json();
+  root.Links.push({ Hash: { "/": added.Hash }, Name: "signature.json", Tsize: Number(added.Size) });
+  root.Links.sort((a, b) => (a.Name < b.Name ? -1 : a.Name > b.Name ? 1 : 0));
+  const put = await (await ipfsApi(`/api/v0/dag/put?store-codec=dag-pb&input-codec=dag-json`, fileForm(JSON.stringify(root), "root"))).json();
+  const newRootCid = CID.parse(put.Cid["/"]).toV0().toString();
+  await ipfsApi(`/api/v0/pin/add?arg=${newRootCid}`);
 
-    const newEntries = await listDirectory(newRootCid);
-    const newSignature = await findSignature(newEntries);
-    const recomputed = serializeIpfsDirectory(newEntries, newSignature.cid);
-    const signer = ethers.verifyMessage(recomputed, newSignature.signature);
-
-    console.log(newRootCid);
-    console.error(`# signer: ${signer}`);
-  } finally {
-    await ipfsApi(`/api/v0/files/rm?arg=${encodeURIComponent(mfsDir)}&recursive=true`);
-  }
+  const newEntries = await listDirectory(newRootCid);
+  const newSignature = await findSignature(newEntries);
+  const signer = ethers.verifyMessage(serializeIpfsDirectory(newEntries, newSignature.cid), newSignature.signature);
+  console.log(newRootCid);
+  console.error(`# signer: ${signer}`);
 }
 
 function parseFlags(argv) {
