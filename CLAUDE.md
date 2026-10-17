@@ -259,5 +259,14 @@ cast call 0x5f4eC3Df9cbd43714FE2740f5E3616155c5b8419 "latestAnswer()(int256)" --
   own *Sign release* step, which adds `signature.json` itself, so it must get the unsigned hash. Seen on the first
   publish (2026-10-16). `assemble` used to write through MFS, which stores `signature.json` differently: same bytes,
   but a different hash than the page's.
+- **sdk-publish's IPFS step can 504 on fresh content.** The page reads `dappnode_package.json` through its gateway
+  (default `https://ipfs-gateway-dev.dappnode.net`) and errors with "Hash or manifest not found". When only the
+  maintainer's node holds a release, the gateway's first fetch times out after 30 s, keeps fetching in the
+  background, and serves it on the next try.
+  - Before he opens the page, warm it until each request returns 200:
+    `curl https://ipfs-gateway-dev.dappnode.net/ipfs/<unsigned>/dappnode_package.json` and
+    `curl https://ipfs-gateway-dev.dappnode.net/ipfs/<signed>/signature.json` (the page checks that file after
+    signing).
+  - Fallback for the gateway field: `https://gateway.pinata.cloud` (served both, CORS `*`, 2026-10-17).
 - **DAppNode's networks:** `dncore_network` is `172.33.0.0/16`, the OpenVPN pool `172.33.8.0/22`, WireGuard
   `10.24.0.0/24`. The default `ALLOWED_NETWORKS` covers all of them. VPN access is untested.
