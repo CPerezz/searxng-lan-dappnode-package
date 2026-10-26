@@ -4,7 +4,7 @@
   "upstream": [
     {
       "repo": "searxng/searxng",
-      "version": "2026.10.11-ad46ebd7d",
+      "version": "2026.10.25-54ca1d9cf",
       "arg": "SEARXNG_VERSION"
     }
   ],
